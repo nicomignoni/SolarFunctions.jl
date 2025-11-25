@@ -1,3 +1,17 @@
-# Irradia.jl
+<div align="center">
 
-A Julia package for irradiance and Sun-related calculations. Heavily inspired by [`pvlib`](https://github.com/pvlib/pvlib-python/).
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/src/assets/logo.svg">
+  <img alt="irradia logo" src="docs/src/assets/logo.svg" width="20%" height="20%">
+</picture>
+
+**Compute sun-position angles and irradiance components in Julia**
+
+</div>
+
+Install `Irradia.jl` from the Julia REPL
+```
+] add https://github.com/nicomignoni/Irradia.jl.git
+```
+
+Check out the [docs]() for a quickstart.

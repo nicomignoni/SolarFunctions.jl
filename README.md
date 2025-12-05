@@ -5,13 +5,13 @@
   <img alt="irradia logo" src="docs/src/assets/logo.svg" width="20%" height="20%">
 </picture>
 
-**Compute sun-position angles and irradiance components in Julia**
+**Julia functions for computing Sun-related quantites.**
 
 </div>
 
-Install `Irradia.jl` from the Julia REPL
+Install `SolarFunctions.jl` from the Julia REPL
 ```
-] add https://github.com/nicomignoni/Irradia.jl.git
+] add https://github.com/nicomignoni/SolarFunctions.jl.git
 ```
 
-Check out the [docs]() for a quickstart.
+Check out the [docs](https://nicomignoni.github.io/SolarFunctions.jl/dev/) for a quickstart.

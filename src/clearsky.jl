@@ -1,155 +1,176 @@
-using Dates, Serialization
-
-# The .h5 file 'LinkeTurbidities.h5' contains a single 2160 x 4320 x 12
-# matrix of type uint8 called 'LinkeTurbidity'.  To determine the Linke
-# turbidity for a position on the Earth's surface for a given month do the
-# following: LT = LinkeTurbidity(LatitudeIndex, LongitudeIndex, month).
-
-# The nodes of the grid are 5' (1/12=0.0833[arcdeg]) apart.
-# From Section 8 of Aerosol optical depth and Linke turbidity climatology
-# http://www.meteonorm.com/images/uploads/downloads/ieashc36_report_TL_AOD_climatologies.pdf
-# 1st row: 89.9583 S, 2nd row: 89.875 S
-# 1st column: 179.9583 W, 2nd column: 179.875 W
-const LINKE_TURBIDITY = open("data/linke-turbidity.jld", "r") do io;
-    deserialize(io)
-end
-
-# Bounds (in degrees) for latitude and longitude
-const LATITUDE_MAX = 90
-const LATITUDE_MIN = -90
-const LONGITUDE_MAX = 180
-const LONGITUDE_MIN = -180 
-
-const latitude_range = LATITUDE_MAX - LATITUDE_MIN
-const longitude_range = LONGITUDE_MAX - LONGITUDE_MIN
-
 """
-    linke_turbidity(lat::Real, lon::Real, month::Int, lt_data::Array)
+    clearsky_ineichen(
+        sun_apparent_elevation::Real,
+        observer_altitude::Real,
+        absolute_airmass::Real,
+        linke_turbidity::Real,
+        extraterrestial_radiation::Real,
+        perez_enhancement::Bool
+    )
 
-Interpolates the Like turbidity for the corrsponding latitude, longitude, and month values.
+Implements the Ineichen and Perez clear sky model for global horizontal irradiance (GHI), direct normal irradiance (DNI), and calculates the clear-sky diffuse horizontal (DHI) component as the difference between GHI and DNI*cos(zenith) as presented in [ineichen2002new, perez2002new](@cite). A report on clear sky models found the Ineichen/Perez model to have excellent performance with a minimal input data set [stein2012global](@cite). Default values for monthly Linke turbidity provided by SoDa [sodapro, remund2003worldwide](@cite).
 
 # Arguments
-- lat::Real - [degrees] the observer geographical latitude
-- lon::Real - [degrees] the observer geographical longitude
-- month::Int - Month expressed in a 1-12 range (i.e., 1 for January, 5 for May)
-- `lt_data::Array` - Linke turbidity array. Rows represent global latitudes from 90 
-to -90 degrees; columns represent global longitudes from -180 to 180; depth 
-(third dimension) represents months of the year from January (1) to December (12). 
-"""
-function linke_turbidity(
-    latitude::Real,
-    longitude::Real,
-    month::Int,
-    lt_data::Array
-)
-    i = size(turbidity_data, 1) * (latitude - LATITUDE_MIN) / latitude_range 
-    j = size(turbidity_data, 2) * (longitude - LONGITUDE_MIN) / longitude_range 
-
-    i⁻, i⁺ = floor(i) |> Int, ceil(i) |> Int 
-    j⁻, j⁺ = floor(j) |> Int, ceil(j) |> Int 
-
-    # Index position between rounded row and column as [0, 1] fraction
-    ν, τ = i - i⁻, j - j⁻
-
-    # Bilinear interpolation of row-column data
-    lt = ν * τ * lt_data[i⁻, j⁻, month] + 
-         ν * (1 - τ) * lt_data[i⁻, j⁺, month] + 
-         (1 - ν) * τ * lt_data[i⁺, j⁻, month] + 
-         (1 - ν) * (1 - τ) * lt_data[i⁺, j⁺, month] 
-
-    # The numbers within the matrix are 20 * Linke Turbidity
-    return lt / 20
-end
-
-"""
-    ineichen(apparent_zenith, airmass_absolute, linke_turbidity, altitude=0, dni_extra=1364.0, perez_enhancement::Bool=false)
-
-Determine clear sky GHI, DNI, and DHI from Ineichen/Perez model.
-
-Implements the Ineichen and Perez clear sky model for global
-horizontal irradiance (GHI), direct normal irradiance (DNI), and
-calculates the clear-sky diffuse horizontal (DHI) component as the
-difference between GHI and DNI*cos(zenith) as presented in [^1] [^2]. A
-report on clear sky models found the Ineichen/Perez model to have
-excellent performance with a minimal input data set [^3].
-
-Default values for monthly Linke turbidity provided by SoDa [^4], [^5].
-
-# Arguments
-- `apparent_zenith::Real` - Refraction corrected solar zenith angle in degrees.
-- `airmass_absolute::Real` - Pressure corrected airmass.
+- `sun_apparent_elevation::Real` - [deg] Refraction corrected solar elevation angle
+- `observer_altitude::Real` - [m] Altitude above sea level.
+- `absolute_airmass::Real` - Pressure corrected airmass.
 - `linke_turbidity::Real` - Linke Turbidity.
-- `altitude::Real = 0` - Altitude above sea level in meters.
-- `dni_extra::Real=1364` - Extraterrestrial irradiance. The units of ``dni_extra`` determine the units of the output.
-- `perez_enhancement::Bool=false` - Controls if the Perez enhancement factor should be applied. Setting to `true` [may 
-produce spurious results](https://github.com/pvlib/pvlib-python/issues/435) for times when the Sun is near the horizon 
-and the airmass is high.
+- `extraterrestial_radiation::Real` - [W/m^2] Extraterrestrial irradiance.
+- `perez_enhancement::Bool` - Controls if the Perez enhancement factor should be applied. Setting to `true` [may produce spurious results](https://github.com/pvlib/pvlib-python/issues/435) for times when the Sun is near the horizon and the airmass is high.
 
 # Returns
-- `dni::Real` - direct normal irradiance 
-- `dhi::Real` - direct horizontal irradiance 
-- `ghi::Real` - global horizoantal irradiance
-
-[^1]: P. Ineichen and R. Perez, "A New airmass independent formulation for
-the Linke turbidity coefficient", Solar Energy, vol 73, pp. 151-157,
-2002.
-
-[^2]: R. Perez et. al., "A New Operational Model for Satellite-Derived
-Irradiances: Description and Validation", Solar Energy, vol 73, pp.
-307-317, 2002.
-
-[^3]: M. Reno, C. Hansen, and J. Stein, "Global Horizontal Irradiance
-Clear Sky Models: Implementation and Analysis", Sandia National
-Laboratories, SAND2012-2389, 2012.
-
-[^4]: https://www.soda-pro.com/help/general-knowledge/linke-turbidity-factor
-(accessed February 2, 2024).
-
-[^5]: J. Remund, et. al., "Worldwide Linke Turbidity Information", Proc.
-ISES Solar World Congress, June 2003. Goteborg, Sweden.
+- `dni::Real` - [W/m^2] direct normal irradiance 
+- `dhi::Real` - [W/m^2] direct horizontal irradiance 
+- `ghi::Real` - [W/m^2] global horizoantal irradiance
 """
-function ineichen(
-    apparent_zenith,
-    airmass_absolute,
-    linke_turbidity,
-    altitude=0,
-    dni_extra=1364.0,
-    perez_enhancement::Bool=false
+function clearsky_ineichen(
+    sun_apparent_elevation::Real,
+    observer_altitude::Real,
+    absolute_airmass::Real,
+    linke_turbidity::Real,
+    extraterrestial_radiation::Real,
+    perez_enhancement::Bool
 )
-    cos_zenith = maximum(cosd(apparent_zenith), 0)
+    sin_elev = max(sind(sun_apparent_elevation), 0.0)
 
     tl = linke_turbidity
 
-    fh1 = exp(-altitude / 8000.0)
-    fh2 = exp(-altitude / 1250.0)
-    cg1 = 5.09e-05 * altitude + 0.868
-    cg2 = 3.92e-05 * altitude + 0.0387
+    fh1 = exp(-observer_altitude / 8000.0)
+    fh2 = exp(-observer_altitude / 1250.0)
+    cg1 = 5.09e-05observer_altitude + 0.868
+    cg2 = 3.92e-05observer_altitude + 0.0387
 
-    ghi = exp(-cg2 * airmass_absolute * (fh1 + fh2 * (tl - 1)))
+    ghi = exp(-cg2 * absolute_airmass * (fh1 + fh2 * (tl - 1)))
 
     # https://github.com/pvlib/pvlib-python/issues/435
     if perez_enhancement
-        ghi *= exp(0.01 * airmass_absolute^1.8)
+        ghi *= exp(0.01absolute_airmass^1.8)
     end
 
     # use maximum to map airmass nans to 0s. multiply and divide by tl to
     # reinsert tl nans
-    ghi = cg1 * dni_extra * cos_zenith * tl / tl * maximum(ghi, 0)
+    ghi = cg1 * extraterrestial_radiation * sin_elev * tl / tl * max(ghi, 0.0)
 
     # From [1] (Following [2] leads to 0.664 + 0.16268 / fh1)
     # See https://github.com/pvlib/pvlib-python/pull/808
     b = 0.664 + 0.163 / fh1
     # BncI = "normal beam clear sky radiation"
-    bnci = b * exp(-0.09 * airmass_absolute * (tl - 1))
-    bnci = dni_extra * maximum(bnci, 0)
+    bnci = b * exp(-0.09absolute_airmass * (tl - 1))
+    bnci = extraterrestial_radiation * max(bnci, 0.0)
 
     # "empirical correction" SE 73, 157 & SE 73, 312.
-    bnci_2 = ((1 - (0.1 - 0.2 * exp(-tl)) / (0.1 + 0.882 / fh1)) / cos_zenith)
-    bnci_2 = ghi * minimum(maximum(bnci_2, 0), 1e20)
+    bnci_2 = (1 - (0.1 - 0.2exp(-tl)) / (0.1 + 0.882 / fh1)) / sin_elev
+    bnci_2 = ghi * min(max(bnci_2, 0.0), 1e20)
 
-    dni = minimum(bnci, bnci_2)
-
-    dhi = ghi - dni * cos_zenith
+    dni = min(bnci, bnci_2)
+    dhi = ghi - dni * sin_elev
 
     return dni, dhi, ghi
+end
+
+"""
+    clearsky_haurwitz(sun_apparent_elevation::Real)
+
+Implements the Haurwitz clear sky model for global horizontal irradiance (GHI) as presented in [haurwitz1945insolation, haurwitz1946insolation](@cite). A report on clear sky models found the Haurwitz model to have the best performance in terms of average monthly error among models which require only the Sun's elevation [stein2012global](@cite).
+
+# Arguments
+- `sun_apparent_elevation::Real` - [deg] The apparent (refraction corrected) Sun's elevation angle in degrees.
+
+# Returns
+- `ghi::Real` - [W/m^2] The modeled global horizonal irradiance in  provided by the Haurwitz clear-sky model.
+"""
+function clearsky_haurwitz(sun_apparent_elevation::Real)
+    sin_elev = sind(sun_apparent_elevation)
+    ghi = sin_elev < 0.0 ? 0.0 : 1098.0sin_elev * exp(-0.059/sin_elev)
+    return ghi
+end
+
+"""
+    clearsky_simplified_solis(
+        sun_apparent_elevation::Real,
+        aod700::Real,
+        precipitable_water::Real,
+        pressure::Real,
+        extraterrestial_radiation::Real
+    )
+
+Calculate the clear sky GHI, DNI, and DHI according to the simplified Solis model. Reference [ineichen2008broadband](@cite) describes the accuracy of the model as being 15, 20, and 18 W/m^2 for the beam, global, and diffuse components, respectively. Reference [ineichen2016validation](@cite) provides comparisons with other clear sky models.
+
+# Arguments
+- `sun_apparent_elevation::Real` - [degrees] The apparent elevation of the sun above the horizon.
+- `aod700::Real` - The aerosol optical depth at 700 nm. Algorithm derived for values between 0 and 0.45.
+- `precipitable_water::Real` - [cm] The precipitable water of the atmosphere. Algorithm derived for values between 0.2 and 10 cm. Values less than 0.2 will be assumed to be equal to 0.2.
+- `pressure::Real` - [Pa] The atmospheric pressure. Algorithm derived for altitudes between sea level and 7000 m, or 101325 and 41000 Pascals.
+- `extraterrestial_radiation::Real` - [W/m^2] Extraterrestrial irradiance. The units of `extraterrestial_radiation` determine the units of the output.
+
+# Returns
+- `dni::Real` - [W/m^2] direct normal irradiance 
+- `dhi::Real` - [W/m^2] direct horizontal irradiance 
+- `ghi::Real` - [W/m^2] global horizoantal irradiance
+"""
+function clearsky_simplified_solis(
+    sun_apparent_elevation::Real,
+    aod700::Real,
+    precipitable_water::Real,
+    pressure::Real,
+    extraterrestial_radiation::Real
+)
+    # algorithm fails for pw < 0.2
+    w = maximum(precipitable_water, 0.2)
+
+    log_w = log(w)
+    log_scaled_p = log(pressure / ATMOSPHERIC_PRESSURE)
+
+    I₀₀ = 1.08w^0.0051
+    I₀₁ = 0.97w^0.032
+    I₀₂ = 0.12w^0.56
+    I₀ = extraterrestial_radiation * 
+         (I₀₀*aod700^2 + I₀₁*aod700 + I₀₀ + 0.071log_scaled_p)
+
+    tb₁ = 1.82 + 0.056log_w + 0.0071log_w^2
+    tb₀ = 0.33 + 0.045log_w + 0.0096log_w^2
+    tbₚ = 0.0089w + 0.13
+    τb = tb₁*aod700 + tb₀ + tbₚ*log_scaled_p
+
+    b₁ = 0.00925aod700^2 + 0.0148aod700 - 0.0172
+    b₀ = -0.7565aod700^2 + 0.5057aod700 + 0.4557
+    b = b₁ * log_w + b₀
+
+    tg₁ = 1.24 + 0.047log_w + 0.0061log_w^2
+    tg₀ = 0.27 + 0.043log_w + 0.0090log_w^2
+    tgₚ = 0.0079w + 0.1
+    τg = tg₁*aod700 + tg₀ + tgₚ*log_scaled_p
+
+    g = -0.0147log_w - 0.3079aod700^2 + 0.2846aod700 + 0.3798
+
+    if aod700 < 0.05
+        td₄ = 86.0w - 13800.0
+        td₃ = -3.11w + 79.4
+        td₂ = -0.23w + 74.8
+        td₁ = 0.092w - 8.86
+        td₀ = 0.0042w + 3.12
+        tdₚ = -0.83(1.0 + aod700)^(-17.2)
+    else
+        td₄ = -0.21w + 11.6
+        td₃ = 0.27w - 20.7
+        td₂ = -0.134w + 15.5
+        td₁ = 0.0554w - 5.71
+        td₀ = 0.0057w + 2.94
+        tdₚ = -0.71(1.0 + aod700)^(-15.0)
+    end
+
+    τd = td₄*aod700^4 + td₃*aod700^3 + td₂*aod700^2 +
+         td₁*aod700 + td₀ + tdₚ*log_scaled_p
+    
+    dₚ = 1 / (18.0 + 152.0aod700)
+    d = -0.337aod700^2 + 0.63aod700 + 0.116 + dₚ*log_scaled_p
+    
+    # this prevents the creation of nans at night instead of 0s
+    sin_elev = maximum(1.0e-30, sind(sun_apparent_elevation))
+    
+    dni = I₀ * exp(-τb / sin_elev^b)
+    ghi = I₀ * exp(-τg / sin_elev^g) * sin_elev
+    dhi = I₀ * exp(-τd / sin_elev^d)
+    
+    return dhi, ghi, dhi
 end

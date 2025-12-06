@@ -2,7 +2,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/src/assets/logo.svg">
-  <img alt="irradia logo" src="docs/src/assets/logo.svg" width="20%" height="20%">
+  <img alt="SolarFunctions logo" src="docs/src/assets/logo.svg" width="20%" height="20%">
 </picture>
 
 **Julia functions for computing Sun-related quantites.**

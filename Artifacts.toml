@@ -1,0 +1,6 @@
+[data]
+git-tree-sha1 = "ecb9876662792d28040dfa0c2454baa7f5f2dc97"
+
+    [[data.download]]
+    sha256 = "95e009049c65e713f9b6e7887523e81fe50e0b034e3e79dda9c28b064d357390"
+    url = "https://github.com/nicomignoni/SolarFunctions.jl/archive/refs/tags/v0.1.0-pre-release.tar.gz"

@@ -1,3 +1,5 @@
+push!(LOAD_PATH,"../src/")
+
 using Documenter, DocumenterCitations, SolarFunctions
 
 bib = CitationBibliography(joinpath(@__DIR__, "src", "references.bib"))
